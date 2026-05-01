@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Workout</title>
+
+  <style>
+    body {
+      margin:0;
+      font-family:Poppins;
+      background:#0f172a;
+      color:white;
+    }
+
+    .header {
+      display:flex;
+      align-items:center;
+      gap:10px;
+      padding:15px;
+    }
+
+    .back {
+      cursor:pointer;
+      font-size:18px;
+    }
+
+    .title {
+      font-size:22px;
+      font-weight:600;
+    }
+
+    .container {
+      padding:15px;
+    }
+
+    .section-title {
+      margin:20px 0 10px;
+      font-size:18px;
+      font-weight:500;
+    }
+
+    .grid {
+      display:grid;
+      grid-template-columns:repeat(2, 1fr);
+      gap:15px;
+    }
+
+    .card {
+      background:linear-gradient(135deg,#1e293b,#334155);
+      padding:15px;
+      border-radius:15px;
+      text-align:center;
+      cursor:pointer;
+      transition:0.25s;
+    }
+
+    .card:hover {
+      transform:scale(1.05);
+      box-shadow:0 10px 25px rgba(0,0,0,0.4);
+    }
+
+    .card img {
+      width:100%;
+      height:120px;
+      object-fit:cover;
+      border-radius:10px;
+      margin-bottom:10px;
+    }
+
+    .name {
+      font-size:16px;
+      font-weight:500;
+    }
+
+    .desc {
+      font-size:12px;
+      opacity:0.7;
+      margin-top:5px;
+    }
+  </style>
+</head>
+
+<body>
+
+<div class="header">
+  <div class="back" onclick="goBack()">⬅</div>
+  <div class="title">Workout</div>
+</div>
+
+<div class="container">
+
+  <!-- 🤖 AI COACH -->
+  <div class="section-title">🤖 AI Coach</div>
+
+  <div class="grid">
+
+   <div class="card" onclick="go('workout-coach.html')">
+  <img src="https://images.unsplash.com/photo-1517836357463-d25dfeac3438">
+  <div class="name">AI Coach</div>
+  <div class="desc">All AI exercises in one place</div>
+</div>
+
+  </div>
+
+  <!-- 🔥 BODY FOCUS -->
+  <div class="section-title">🔥 Body Focus</div>
+
+  <div class="grid">
+
+    <div class="card" onclick="go('legs.html')">
+      <img src="https://images.unsplash.com/photo-1598970434795-0c54fe7c0642">
+      <div class="name">Legs</div>
+      <div class="desc">Quads & Hamstrings</div>
+    </div>
+
+    <div class="card" onclick="go('chest.html')">
+      <img src="https://images.unsplash.com/photo-1571019613454-1cb2f99b2d8b">
+      <div class="name">Chest</div>
+      <div class="desc">Push workouts</div>
+    </div>
+
+    <div class="card" onclick="go('back.html')">
+      <img src="https://images.unsplash.com/photo-1605296867304-46d5465a13f1">
+      <div class="name">Back</div>
+      <div class="desc">Pull strength</div>
+    </div>
+
+    <div class="card" onclick="go('abs.html')">
+      <img src="https://images.unsplash.com/photo-1583454110551-21f2fa2afe61">
+      <div class="name">Abs</div>
+      <div class="desc">Core training</div>
+    </div>
+
+  </div>
+
+  <!-- ⚡ QUICK START -->
+  <div class="section-title">⚡ Quick Start</div>
+
+  <div class="grid">
+
+    <div class="card" onclick="go('quick-15min.html')">
+      <img src="https://images.unsplash.com/photo-1558611848-73f7eb4001ab">
+      <div class="name">15 Min Workout</div>
+      <div class="desc">Fast session</div>
+    </div>
+
+    <div class="card" onclick="go('fatburn.html')">
+      <img src="https://images.unsplash.com/photo-1571019614242-c5c5dee9f50b">
+      <div class="name">Fat Burn</div>
+      <div class="desc">High intensity</div>
+    </div>
+
+  </div>
+
+</div>
+
+<script>
+function go(page){
+  window.location.href = page;
+}
+
+function goBack(){
+  window.location.href = "dashboard.html";
+}
+</script>
+
+</body>
+</html>

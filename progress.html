@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Progress</title>
+
+  <!-- Chart.js -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+  <!-- Firebase -->
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+
+  <style>
+    body {
+      margin:0;
+      background:#0f172a;
+      color:white;
+      font-family:Poppins;
+    }
+
+    .header {
+      display:flex;
+      align-items:center;
+      gap:10px;
+      padding:15px;
+    }
+
+    .back {
+      cursor:pointer;
+      font-size:18px;
+    }
+
+    .title {
+      font-size:20px;
+      font-weight:600;
+    }
+
+    .container {
+      padding:20px;
+    }
+
+    canvas {
+      background:#1e293b;
+      border-radius:15px;
+      padding:15px;
+      margin-top:20px;
+    }
+  </style>
+</head>
+
+<body>
+
+<div class="header">
+  <div class="back" onclick="goBack()">⬅</div>
+  <div class="title">Progress 📊</div>
+</div>
+
+<div class="container">
+  <canvas id="repChart"></canvas>
+</div>
+
+<script>
+// For Firebase JS SDK v7.20.0 and later, measurementId is optional
+  const firebaseConfig = {
+  apiKey: "AIzaSyBsL6ATzAach4mkO6-EIKsFdAWUJLHHkh4",
+  authDomain: "smartrep-8ca34.firebaseapp.com",
+  projectId: "smartrep-8ca34",
+  storageBucket: "smartrep-8ca34.firebasestorage.app",
+  messagingSenderId: "874359721336",
+  appId: "1:874359721336:web:354997f4d68ab514dd8c8d",
+  measurementId: "G-Q1H88BXYGW"
+};
+
+firebase.initializeApp(firebaseConfig);
+const auth = firebase.auth();
+const db = firebase.firestore();
+
+/* LOAD DATA */
+auth.onAuthStateChanged(user => {
+  if (!user) {
+    window.location.href = "index.html";
+    return;
+  }
+
+  db.collection("workouts")
+    .where("userId", "==", user.uid)
+    .orderBy("createdAt")
+    .get()
+    .then(snapshot => {
+
+      let labels = [];
+      let reps = [];
+
+      snapshot.forEach(doc => {
+        const data = doc.data();
+
+        const date = new Date(data.createdAt.seconds * 1000);
+        const label = date.toLocaleDateString();
+
+        labels.push(label);
+        reps.push(data.reps);
+      });
+
+      createChart(labels, reps);
+    });
+});
+
+/* CREATE GRAPH */
+function createChart(labels, reps) {
+  const ctx = document.getElementById('repChart');
+
+  new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: labels,
+      datasets: [{
+        label: 'Reps Progress',
+        data: reps,
+        borderColor: '#3b82f6',
+        backgroundColor: 'rgba(59,130,246,0.2)',
+        tension: 0.4,
+        fill: true
+      }]
+    },
+    options: {
+      plugins: {
+        legend: { labels: { color: 'white' } }
+      },
+      scales: {
+        x: { ticks: { color: 'white' } },
+        y: { ticks: { color: 'white' } }
+      }
+    }
+  });
+}
+
+/* NAV */
+function goBack(){
+  window.location.href = "dashboard.html";
+}
+</script>
+
+</body>
+</html>

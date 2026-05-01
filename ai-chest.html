@@ -1,0 +1,549 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>SmartRep Chest Coach 💥</title>
+
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/pose-detection"></script>
+
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+
+<style>
+body{margin:0;font-family:Poppins,Arial;background:#020617;color:white;text-align:center}
+.header{display:flex;justify-content:space-between;align-items:center;padding:14px}
+button{padding:11px 16px;margin:5px;border:none;border-radius:10px;background:#3b82f6;color:white;cursor:pointer;font-weight:600}
+button:hover{background:#2563eb}
+.camera-box{position:relative;width:640px;max-width:95%;margin:auto;border-radius:18px;overflow:hidden;box-shadow:0 0 30px rgba(59,130,246,.45)}
+video{width:100%;transform:scaleX(-1)}
+canvas{position:absolute;top:0;left:0;width:100%;height:100%;transform:scaleX(-1)}
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;max-width:640px;margin:18px auto;padding:0 10px}
+.card{background:#0f172a;border:1px solid #1e293b;border-radius:15px;padding:12px}
+.card h3{margin:0;font-size:13px;color:#94a3b8}
+.card p{margin:8px 0 0;font-size:22px;font-weight:700}
+#feedback{font-size:22px;font-weight:700;padding:12px;color:#e0f2fe}
+.hidden{display:none}
+.status{color:#94a3b8}
+</style>
+</head>
+
+<body>
+
+<div class="header">
+  <button onclick="goBack()">⬅ Back</button>
+  <h2>Chest Coach 💥</h2>
+  <span></span>
+</div>
+
+<div class="camera-box">
+  <video id="video" autoplay playsinline></video>
+  <canvas id="canvas"></canvas>
+</div>
+
+<div class="stats">
+  <div class="card"><h3>Reps</h3><p id="count">0</p></div>
+  <div class="card"><h3>Bad Reps</h3><p id="badCount">0</p></div>
+  <div class="card"><h3>Calories</h3><p id="calories">0</p></div>
+</div>
+
+<p id="feedback">Loading AI...</p>
+
+<div class="controls">
+  <button id="startBtn" onclick="toggleStart()">Start</button>
+  <button id="pauseBtn" class="hidden" onclick="togglePause()">Pause</button>
+  <button onclick="saveWorkout()">Save</button>
+  <button onclick="resetWorkout()">Reset</button>
+</div>
+
+<p class="status" id="status">Stopped</p>
+
+<script>
+const firebaseConfig = {
+  apiKey: "AIzaSyBsL6ATzAach4mkO6-EIKsFdAWUJLHHkh4",
+  authDomain: "smartrep-8ca34.firebaseapp.com",
+  projectId: "smartrep-8ca34",
+  storageBucket: "smartrep-8ca34.firebasestorage.app",
+  messagingSenderId: "874359721336",
+  appId: "1:874359721336:web:354997f4d68ab514dd8c8d",
+  measurementId: "G-Q1H88BXYGW"
+};
+
+firebase.initializeApp(firebaseConfig);
+const auth = firebase.auth();
+const db = firebase.firestore();
+
+let detector = null;
+let video, canvas, ctx;
+
+let count = 0;
+let badCount = 0;
+let calories = 0;
+
+let stage = "ready";
+let repStarted = false;
+let wentLowEnough = false;
+let badForm = false;
+let smoothAngle = 0;
+let repStartTime = 0;
+let hasStartedFromTop = false;
+
+let isRunning = false;
+let isPaused = false;
+let animationId = null;
+let cameraStarted = false;
+
+let prevKeypoints = null;
+let lastVoiceTime = 0;
+let lastSpokenMsg = "";
+
+async function checkAccess(){
+  const user = auth.currentUser;
+
+  if(!user){
+    window.location.href = "index.html";
+    return false;
+  }
+
+  const ref = db.collection("users").doc(user.uid);
+  const doc = await ref.get();
+
+  let data;
+
+  if(!doc.exists){
+    data = { freeUses: 5, isPremium: false };
+    await ref.set(data);
+  } else {
+    data = doc.data();
+  }
+
+  if(data.isPremium === true || localStorage.getItem("premiumUser") === "true"){
+    return true;
+  }
+
+  if(data.freeUses > 0){
+    await ref.update({ freeUses: data.freeUses - 1 });
+    alert(`Free uses left: ${data.freeUses - 1}`);
+    return true;
+  }
+
+  const current = window.location.pathname.split("/").pop().replace(".html","");
+window.location.href = "membership.html?from=" + current;
+  return false;
+}
+
+function speak(msg){
+  const now = Date.now();
+
+  if(msg === lastSpokenMsg && now - lastVoiceTime < 5000) return;
+  if(now - lastVoiceTime < 2500) return;
+
+  speechSynthesis.cancel();
+
+  const voice = new SpeechSynthesisUtterance(msg);
+  voice.rate = 0.95;
+  voice.pitch = 1;
+  voice.volume = 1;
+
+  speechSynthesis.speak(voice);
+
+  lastVoiceTime = now;
+  lastSpokenMsg = msg;
+}
+
+function goBack(){
+  const params = new URLSearchParams(window.location.search);
+  const from = params.get("from") || "dashboard";
+
+  window.location.href = from + ".html";
+}
+
+async function loadDetector(){
+  if(!detector){
+    detector = await poseDetection.createDetector(
+      poseDetection.SupportedModels.MoveNet,
+      { modelType: poseDetection.movenet.modelType.SINGLEPOSE_THUNDER }
+    );
+  }
+}
+
+window.onload = async()=>{
+  try{
+    await loadDetector();
+    document.getElementById("feedback").innerText = "AI Ready ✅";
+  }catch(err){
+    document.getElementById("feedback").innerText = "AI failed to load ❌";
+    console.error(err);
+  }
+};
+
+async function initCamera(){
+  if(cameraStarted) return;
+
+  video = document.getElementById("video");
+  canvas = document.getElementById("canvas");
+  ctx = canvas.getContext("2d");
+
+  const stream = await navigator.mediaDevices.getUserMedia({
+    video:{width:1280,height:720,frameRate:30}
+  });
+
+  video.srcObject = stream;
+
+  await new Promise(resolve=>{
+    video.onloadedmetadata = ()=>resolve();
+  });
+
+  await video.play();
+
+  canvas.width = video.videoWidth;
+  canvas.height = video.videoHeight;
+
+  cameraStarted = true;
+}
+
+function isVisible(...points){
+  return points.every(p => p && p.score > 0.45);
+}
+
+function angle(A,B,C){
+  const AB = Math.atan2(A.y-B.y,A.x-B.x);
+  const CB = Math.atan2(C.y-B.y,C.x-B.x);
+  let ang = Math.abs(AB-CB);
+  if(ang > Math.PI) ang = 2*Math.PI-ang;
+  return ang * 180 / Math.PI;
+}
+
+function drawSkeleton(keypoints){
+  if(prevKeypoints){
+    keypoints = keypoints.map((p,i)=>{
+      const prev = prevKeypoints[i];
+      return {
+        ...p,
+        x:0.75 * prev.x + 0.25 * p.x,
+        y:0.75 * prev.y + 0.25 * p.y
+      };
+    });
+  }
+
+  prevKeypoints = keypoints;
+
+  const pairs = [
+    [5,7],[7,9],
+    [6,8],[8,10],
+    [5,6],
+    [5,11],[6,12],
+    [11,12]
+  ];
+
+  ctx.strokeStyle = "#00ffcc";
+  ctx.lineWidth = 5;
+  ctx.lineCap = "round";
+
+  pairs.forEach(([i,j])=>{
+    const p1 = keypoints[i];
+    const p2 = keypoints[j];
+
+    if(p1 && p2 && p1.score > 0.4 && p2.score > 0.4){
+      ctx.beginPath();
+      ctx.moveTo(p1.x,p1.y);
+      ctx.lineTo(p2.x,p2.y);
+      ctx.stroke();
+    }
+  });
+
+  keypoints.forEach(p=>{
+    if(p && p.score > 0.45){
+      ctx.beginPath();
+      ctx.arc(p.x,p.y,5,0,2*Math.PI);
+      ctx.fillStyle = "#ff3b3b";
+      ctx.fill();
+    }
+  });
+}
+
+function getPushupAngle(k){
+  const leftShoulder = k[5];
+  const leftElbow = k[7];
+  const leftWrist = k[9];
+
+  const rightShoulder = k[6];
+  const rightElbow = k[8];
+  const rightWrist = k[10];
+
+  const angles = [];
+
+  if(isVisible(leftShoulder,leftElbow,leftWrist)){
+    angles.push(angle(leftShoulder,leftElbow,leftWrist));
+  }
+
+  if(isVisible(rightShoulder,rightElbow,rightWrist)){
+    angles.push(angle(rightShoulder,rightElbow,rightWrist));
+  }
+
+  if(angles.length === 0) return null;
+
+  return angles.reduce((a,b)=>a+b,0) / angles.length;
+}
+
+function checkChestForm(k){
+  const leftShoulder = k[5];
+  const rightShoulder = k[6];
+  const leftHip = k[11];
+  const rightHip = k[12];
+
+  if(isVisible(leftShoulder,rightShoulder)){
+    if(Math.abs(leftShoulder.y - rightShoulder.y) > 50){
+      return "Keep your shoulders level";
+    }
+  }
+
+  if(isVisible(leftHip,rightHip)){
+    if(Math.abs(leftHip.y - rightHip.y) > 55){
+      return "Keep your body straight";
+    }
+  }
+
+  if(isVisible(leftShoulder,leftHip)){
+    if(Math.abs(leftShoulder.x - leftHip.x) > 180){
+      return "Keep your core tight and body straight";
+    }
+  }
+
+  return null;
+}
+
+async function toggleStart(){
+  const startBtn = document.getElementById("startBtn");
+  const pauseBtn = document.getElementById("pauseBtn");
+
+  if(!isRunning){
+    const allowed = await checkAccess();
+    if(!allowed) return;
+
+    isRunning = true;
+    isPaused = false;
+
+    startBtn.innerText = "Stop";
+    pauseBtn.classList.remove("hidden");
+    pauseBtn.innerText = "Pause";
+
+    document.getElementById("status").innerText = "Live";
+    document.getElementById("feedback").innerText = "Starting camera...";
+
+    await initCamera();
+    await loadDetector();
+
+    detect();
+
+  }else{
+    isRunning = false;
+    isPaused = false;
+
+    startBtn.innerText = "Start";
+    pauseBtn.classList.add("hidden");
+    pauseBtn.innerText = "Pause";
+
+    document.getElementById("status").innerText = "Stopped";
+
+    cancelAnimationFrame(animationId);
+  }
+}
+
+function togglePause(){
+  const pauseBtn = document.getElementById("pauseBtn");
+
+  if(!isPaused){
+    isPaused = true;
+    pauseBtn.innerText = "Resume";
+    document.getElementById("status").innerText = "Paused";
+  }else{
+    isPaused = false;
+    pauseBtn.innerText = "Pause";
+    document.getElementById("status").innerText = "Live";
+    detect();
+  }
+}
+
+async function detect(){
+  if(!isRunning || isPaused) return;
+
+  if(!detector || video.readyState < 2){
+    animationId = requestAnimationFrame(detect);
+    return;
+  }
+
+  const poses = await detector.estimatePoses(video);
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+
+  if(poses.length > 0){
+    const k = poses[0].keypoints;
+
+    drawSkeleton(k);
+
+    const pushupAngle = getPushupAngle(k);
+
+    if(pushupAngle === null){
+      document.getElementById("feedback").innerText = "Show your arms clearly";
+      animationId = requestAnimationFrame(detect);
+      return;
+    }
+
+    // ✅ FIRST FRAME FIX
+    if(smoothAngle === 0){
+      smoothAngle = pushupAngle;
+      document.getElementById("feedback").innerText = "Hold starting position";
+      animationId = requestAnimationFrame(detect);
+      return;
+    }
+
+    smoothAngle = 0.72 * smoothAngle + 0.28 * pushupAngle;
+
+    const formIssue = checkChestForm(k);
+
+    // ✅ USER MUST FIRST BE IN TOP POSITION
+    if(smoothAngle > 155 && !hasStartedFromTop){
+      hasStartedFromTop = true;
+      stage = "ready";
+      document.getElementById("feedback").innerText =
+        "Ready. Now lower your chest slowly";
+      animationId = requestAnimationFrame(detect);
+      return;
+    }
+
+    // ❌ DO NOT COUNT ANYTHING UNTIL TOP POSITION IS SEEN
+    if(!hasStartedFromTop){
+      document.getElementById("feedback").innerText =
+        "Get into push-up top position first";
+      animationId = requestAnimationFrame(detect);
+      return;
+    }
+
+    // START REP
+    if(smoothAngle < 135 && stage === "ready"){
+      stage = "goingDown";
+      repStarted = true;
+      repStartTime = Date.now();
+
+      document.getElementById("feedback").innerText =
+        "Control your body. Go lower";
+    }
+
+    // MID FEEDBACK
+    if(repStarted && smoothAngle >= 90 && smoothAngle <= 135){
+      if(formIssue){
+        badForm = true;
+        document.getElementById("feedback").innerText = formIssue;
+        speak(formIssue);
+      } else {
+        document.getElementById("feedback").innerText =
+          "Go a little lower. Bend your elbows";
+      }
+    }
+
+    // GOOD DEPTH
+    if(repStarted && smoothAngle < 80 && stage === "goingDown"){
+      stage = "down";
+      wentLowEnough = true;
+
+      if(formIssue){
+        badForm = true;
+        document.getElementById("feedback").innerText = formIssue;
+        speak(formIssue);
+      } else {
+        document.getElementById("feedback").innerText =
+          "Good depth. Push up";
+      }
+    }
+
+    // FINISH REP
+    if(repStarted && smoothAngle > 155 && stage === "down"){
+      const duration = (Date.now() - repStartTime) / 1000;
+
+      if(duration < 1){
+        badCount++;
+        document.getElementById("badCount").innerText = badCount;
+
+        const msg = "Bad rep. Slow down your push up";
+        document.getElementById("feedback").innerText = msg;
+        speak(msg);
+      }
+      else if(wentLowEnough && !badForm){
+        count++;
+        calories = Math.round(count * 0.25);
+
+        document.getElementById("count").innerText = count;
+        document.getElementById("calories").innerText = calories;
+
+        const msg = "Good push up";
+        document.getElementById("feedback").innerText = msg + " ✅";
+        speak(msg);
+      }
+      else{
+        badCount++;
+        document.getElementById("badCount").innerText = badCount;
+
+        const msg = "Bad rep. Keep your body straight and go low enough";
+        document.getElementById("feedback").innerText = msg;
+        speak(msg);
+      }
+
+      stage = "ready";
+      repStarted = false;
+      wentLowEnough = false;
+      badForm = false;
+    }
+
+  }else{
+    document.getElementById("feedback").innerText = "Stand clearly in camera";
+  }
+
+  animationId = requestAnimationFrame(detect);
+}
+
+function saveWorkout(){
+  const user = auth.currentUser;
+
+  if(!user){
+    alert("Login first");
+    return;
+  }
+
+  db.collection("workouts").add({
+    userId:user.uid,
+    exercise:"Chest",
+    reps:count,
+    badReps:badCount,
+    calories:calories,
+    createdAt:new Date()
+  })
+  .then(()=>alert("Saved to dashboard ✅"))
+  .catch(err=>alert(err.message));
+}
+
+function resetWorkout(){
+  count = 0;
+  badCount = 0;
+  calories = 0;
+
+  stage = "ready";
+  repStarted = false;
+  hasStartedFromTop = false;
+
+  wentLowEnough = false;
+  badForm = false;
+
+  smoothAngle = 0;
+  prevKeypoints = null;
+
+  document.getElementById("count").innerText = 0;
+  document.getElementById("badCount").innerText = 0;
+  document.getElementById("calories").innerText = 0;
+  document.getElementById("feedback").innerText = "Ready...";
+
+  speechSynthesis.cancel();
+}
+</script>
+
+</body>
+</html>

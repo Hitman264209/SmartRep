@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>SmartRep Membership</title>
+
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+  <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
+
+  <style>
+    body {
+      margin: 0;
+      font-family: Poppins, Arial, sans-serif;
+      background: radial-gradient(circle at top, #1e293b, #020617);
+      color: white;
+      text-align: center;
+    }
+
+    .container {
+      padding: 25px;
+      max-width: 500px;
+      margin: auto;
+    }
+
+    .card {
+      margin-top: 40px;
+      background: rgba(30, 41, 59, 0.85);
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 25px;
+      padding: 30px;
+      box-shadow: 0 0 30px rgba(59,130,246,0.35);
+    }
+
+    h1 { margin-bottom: 10px; }
+
+    .price {
+      font-size: 36px;
+      font-weight: bold;
+      margin: 20px 0;
+      color: #60a5fa;
+    }
+
+    .feature {
+      margin: 12px 0;
+      color: #cbd5e1;
+    }
+
+    button {
+      width: 100%;
+      padding: 14px;
+      margin-top: 20px;
+      border: none;
+      border-radius: 12px;
+      background: linear-gradient(135deg, #2563eb, #7c3aed);
+      color: white;
+      font-size: 16px;
+      cursor: pointer;
+    }
+
+    .back { background: #334155; }
+
+    .trial {
+      margin-top: 15px;
+      color: #facc15;
+      font-size: 14px;
+      line-height: 1.6;
+    }
+  </style>
+</head>
+
+<body>
+
+<div class="container">
+  <div class="card">
+    <h1>SmartRep Premium 💪</h1>
+    <p>Unlock unlimited workout coaching</p>
+
+    <div class="price">₹199 / month</div>
+
+    <div class="feature">✅ Unlimited workout coach access</div>
+    <div class="feature">✅ Biceps, Squat, Chest, Back & Abs</div>
+    <div class="feature">✅ Real-time form correction</div>
+    <div class="feature">✅ Save workout progress</div>
+    <div class="feature">✅ Voice feedback</div>
+
+    <div class="trial" id="trialInfo">Checking membership...</div>
+
+    <button id="buyBtn" onclick="buyMembership()">Buy Premium ₹199</button>
+    <button class="back" onclick="goBack()">Back</button>
+  </div>
+</div>
+
+<script>
+const firebaseConfig = {
+  apiKey: "AIzaSyBsL6ATzAach4mkO6-EIKsFdAWUJLHHkh4",
+  authDomain: "smartrep-8ca34.firebaseapp.com",
+  projectId: "smartrep-8ca34",
+  storageBucket: "smartrep-8ca34.firebasestorage.app",
+  messagingSenderId: "874359721336",
+  appId: "1:874359721336:web:354997f4d68ab514dd8c8d"
+};
+
+firebase.initializeApp(firebaseConfig);
+const auth = firebase.auth();
+const db = firebase.firestore();
+
+auth.onAuthStateChanged(user => {
+  if (!user) {
+    window.location.href = "index.html";
+    return;
+  }
+
+  db.collection("users").doc(user.uid).get().then(doc => {
+    if (doc.exists) {
+      const data = doc.data();
+
+      if (data.isPremium === true) {
+        document.getElementById("trialInfo").innerHTML = `
+          <b>✅ You are a Premium Member</b><br><br>
+          ✔ Unlimited AI workout access<br>
+          ✔ Real-time form correction<br>
+          ✔ Voice coaching enabled<br>
+          ✔ Progress tracking & dashboard<br><br>
+          Enjoy your training 💪🔥
+        `;
+
+        document.getElementById("buyBtn").style.display = "none";
+
+      } else {
+        document.getElementById("trialInfo").innerHTML = `
+          Free AI uses left: ${data.freeUses ?? 0}<br><br>
+          Upgrade to unlock:<br>
+          ✔ Unlimited workouts<br>
+          ✔ Advanced AI feedback<br>
+          ✔ Full progress tracking
+        `;
+
+        document.getElementById("buyBtn").style.display = "block";
+      }
+
+    } else {
+      db.collection("users").doc(user.uid).set({
+        freeUses: 5,
+        isPremium: false,
+        plan: "free",
+        createdAt: firebase.firestore.FieldValue.serverTimestamp()
+      });
+
+      document.getElementById("trialInfo").innerText = "Free AI uses left: 5";
+      document.getElementById("buyBtn").style.display = "block";
+    }
+  });
+});
+
+function buyMembership() {
+  const options = {
+    key: "rzp_test_SiPn1WXcEWNJMP",
+    amount: 19900,
+    currency: "INR",
+    name: "SmartRep Premium",
+    description: "Monthly Membership",
+
+    handler: function (response) {
+      alert("Payment Successful ✅");
+
+      const user = firebase.auth().currentUser;
+
+      if (user) {
+        firebase.firestore().collection("users").doc(user.uid).set({
+          isPremium: true,
+          plan: "monthly",
+          premiumActivatedAt: firebase.firestore.FieldValue.serverTimestamp()
+        }, { merge: true }).then(() => {
+          window.location.href = "dashboard.html";
+        });
+      }
+    }
+  };
+
+  const rzp = new Razorpay(options);
+
+  rzp.on("payment.failed", function (response) {
+    alert("Payment failed: " + response.error.description);
+    console.log(response.error);
+  });
+
+  rzp.open();
+}
+
+function goBack(){
+  const params = new URLSearchParams(window.location.search);
+  const from = params.get("from") || "dashboard";
+
+  window.location.href = from + ".html";
+}
+</script>
+
+</body>
+</html>

@@ -1,0 +1,471 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>SmartRep Dashboard</title>
+
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<style>
+*{box-sizing:border-box}
+body{
+  margin:0;
+  font-family:Poppins,Arial;
+  background:#020617;
+  color:white;
+}
+
+body::before{
+  content:"";
+  position:fixed;
+  inset:0;
+  background:
+    radial-gradient(circle at top left,rgba(59,130,246,.25),transparent 35%),
+    radial-gradient(circle at top right,rgba(239,68,68,.18),transparent 30%);
+  z-index:-1;
+}
+
+.header{
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  padding:18px 24px;
+  background:rgba(15,23,42,.75);
+  backdrop-filter:blur(18px);
+  border-bottom:1px solid rgba(255,255,255,.08);
+  position:sticky;
+  top:0;
+  z-index:10;
+}
+
+.logo{
+  font-size:24px;
+  font-weight:900;
+}
+
+.logo span{color:#ef4444}
+
+.btn{
+  border:none;
+  border-radius:14px;
+  padding:12px 18px;
+  background:#ef4444;
+  color:white;
+  font-weight:800;
+  cursor:pointer;
+}
+
+.container{
+  padding:24px;
+  padding-bottom:90px;
+}
+
+.hero{
+  padding:28px;
+  border-radius:26px;
+  background:linear-gradient(135deg,rgba(239,68,68,.22),rgba(37,99,235,.22));
+  border:1px solid rgba(255,255,255,.1);
+  box-shadow:0 0 40px rgba(37,99,235,.25);
+}
+
+.hero h1{
+  margin:0;
+  font-size:34px;
+}
+
+.hero p{
+  color:#cbd5e1;
+}
+
+.stats{
+  display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(170px,1fr));
+  gap:16px;
+  margin-top:22px;
+}
+
+.card{
+  background:rgba(15,23,42,.82);
+  border:1px solid rgba(255,255,255,.08);
+  border-radius:22px;
+  padding:20px;
+  box-shadow:0 0 28px rgba(0,0,0,.25);
+}
+
+.card h3{
+  margin:0;
+  color:#94a3b8;
+  font-size:14px;
+}
+
+.card p{
+  margin:10px 0 0;
+  font-size:30px;
+  font-weight:900;
+}
+
+.section{
+  margin-top:34px;
+}
+
+.section h2{
+  margin-bottom:14px;
+}
+
+.grid{
+  display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(210px,1fr));
+  gap:16px;
+}
+
+.option{
+  min-height:120px;
+  background:linear-gradient(145deg,rgba(15,23,42,.95),rgba(30,41,59,.7));
+  border:1px solid rgba(255,255,255,.08);
+  border-radius:22px;
+  padding:20px;
+  cursor:pointer;
+  transition:.25s;
+}
+
+.option:hover{
+  transform:scale(1.04);
+  box-shadow:0 0 35px rgba(239,68,68,.25);
+}
+
+.option h3{
+  margin:0 0 10px;
+  font-size:21px;
+}
+
+.option p{
+  margin:0;
+  color:#94a3b8;
+}
+
+.membership{
+  background:linear-gradient(135deg,#ef4444,#7c3aed,#2563eb);
+}
+
+.membership button{
+  margin-top:12px;
+  background:white;
+  color:#111827;
+}
+
+.badge{
+  display:inline-block;
+  background:#22c55e;
+  color:#022c22;
+  padding:6px 12px;
+  border-radius:20px;
+  font-weight:900;
+}
+
+.chartBox{
+  background:rgba(15,23,42,.82);
+  border:1px solid rgba(255,255,255,.08);
+  border-radius:22px;
+  padding:20px;
+  margin-top:16px;
+}
+
+.history{
+  display:grid;
+  gap:12px;
+}
+
+.historyItem{
+  background:rgba(15,23,42,.9);
+  border:1px solid rgba(255,255,255,.08);
+  border-radius:18px;
+  padding:16px;
+}
+
+.bottomNav{
+  position:fixed;
+  bottom:0;
+  left:0;
+  right:0;
+  display:flex;
+  justify-content:space-around;
+  padding:12px 5px;
+  background:rgba(15,23,42,.92);
+  backdrop-filter:blur(18px);
+  border-top:1px solid rgba(255,255,255,.08);
+}
+
+.bottomNav button{
+  background:none;
+  border:none;
+  color:white;
+  font-weight:800;
+  cursor:pointer;
+}
+
+@media(max-width:600px){
+  .hero h1{font-size:26px}
+  .container{padding:16px;padding-bottom:90px}
+}
+</style>
+</head>
+
+<body>
+
+<div class="header">
+  <div class="logo">Smart<span>Rep</span></div>
+  <button class="btn" onclick="logout()">Logout</button>
+</div>
+
+<div class="container">
+
+  <div class="hero">
+    <h1 id="welcome">Welcome 👋</h1>
+    <p>Your AI fitness trainer, workout tracker, and progress dashboard.</p>
+  </div>
+
+
+  <div class="section">
+    <div class="card membership">
+      <h2>Membership 💎</h2>
+      <p id="membershipText">Checking...</p>
+      <button class="btn" onclick="openMembership()">Manage Membership</button>
+    </div>
+  </div>
+
+  <div id="workouts" class="section">
+    <h2>Workout Coach</h2>
+    <div class="grid">
+      <div class="option" onclick="go('ai-biceps.html')"><h3>Biceps 💪</h3><p>Arm tracking + left/right reps</p></div>
+      <div class="option" onclick="go('ai-squat.html')"><h3>Squats 🏋️</h3><p>Form correction + depth tracking</p></div>
+      <div class="option" onclick="go('ai-chest.html')"><h3>Chest 💥</h3><p>Push-up AI coach</p></div>
+      <div class="option" onclick="go('ai-back.html')"><h3>Back 🏹</h3><p>Lat pulldown AI coach</p></div>
+      <div class="option" onclick="go('ai-abs.html')"><h3>Abs 🔥</h3><p>Side crunch AI coach</p></div>
+    </div>
+  </div>
+
+  <div class="section">
+    <h2>Quick Start</h2>
+    <div class="grid">
+      <div class="option" onclick="quickStart('15')"><h3>15 Min Workout ⏱️</h3><p>Biceps → Squats → Abs</p></div>
+      <div class="option" onclick="quickStart('fat')"><h3>Fat Burn 🔥</h3><p>Squats → Chest → Abs</p></div>
+    </div>
+  </div>
+
+  <div id="progress" class="section">
+    <h2>Progress</h2>
+
+    <div class="chartBox">
+      <h3>Daily Calories</h3>
+      <canvas id="dailyChart"></canvas>
+    </div>
+
+    <div class="chartBox">
+      <h3>Exercise-wise Reps</h3>
+      <canvas id="exerciseChart"></canvas>
+    </div>
+  </div>
+
+  <div class="section">
+    <h2>Recent Workouts</h2>
+    <div id="history" class="history">Loading workouts...</div>
+  </div>
+
+</div>
+
+<div class="bottomNav">
+  <button onclick="scrollToSection('workouts')">Workout</button>
+  <button onclick="scrollToSection('progress')">Progress</button>
+  <button onclick="openMembership()">Membership</button>
+  <button onclick="logout()">Logout</button>
+</div>
+
+<script>
+const firebaseConfig = {
+  apiKey: "AIzaSyBsL6ATzAach4mkO6-EIKsFdAWUJLHHkh4",
+  authDomain: "smartrep-8ca34.firebaseapp.com",
+  projectId: "smartrep-8ca34",
+  storageBucket: "smartrep-8ca34.firebasestorage.app",
+  messagingSenderId: "874359721336",
+  appId: "1:874359721336:web:354997f4d68ab514dd8c8d",
+  measurementId: "G-Q1H88BXYGW"
+};
+
+firebase.initializeApp(firebaseConfig);
+const auth = firebase.auth();
+const db = firebase.firestore();
+
+let dailyChart;
+let exerciseChart;
+
+auth.onAuthStateChanged(async user=>{
+  if(!user){
+    window.location.href="index.html";
+    return;
+  }
+
+  document.getElementById("welcome").innerText =
+    `Welcome ${user.displayName || user.email} 👋`;
+
+  await checkMembership(user.uid);
+  await loadDashboard(user.uid);
+});
+
+async function checkMembership(uid){
+  const doc = await db.collection("users").doc(uid).get();
+
+ if(doc.exists && doc.data().isPremium === true){
+    document.getElementById("membershipText").innerHTML =
+      `<span class="badge">Premium Active</span><br><br>You are a Premium Member ✅<br>Unlimited AI Coach access unlocked.`;
+  }else{
+    document.getElementById("membershipText").innerHTML =
+      `Free Plan Active<br>Upgrade for unlimited AI Coach access.`;
+  }
+}
+
+async function loadDashboard(uid){
+  const snap = await db.collection("workouts")
+    .where("userId","==",uid)
+    .orderBy("createdAt","desc")
+    .get();
+
+  let totalWorkouts=0,totalReps=0,totalCalories=0,totalBadReps=0;
+  let daily={};
+  let exerciseData={};
+  let historyHTML="";
+
+  snap.forEach(doc=>{
+    const w=doc.data();
+
+    const exercise=w.exercise || "Workout";
+    const reps=Number(w.reps || 0);
+    const bad=Number(w.badReps || 0);
+    const cal=Number(w.calories || 0);
+
+    totalWorkouts++;
+    totalReps+=reps;
+    totalBadReps+=bad;
+    totalCalories+=cal;
+
+    exerciseData[exercise]=(exerciseData[exercise] || 0)+reps;
+
+    let dateText="No date";
+    let day="Unknown";
+
+    if(w.createdAt && w.createdAt.seconds){
+      const d=new Date(w.createdAt.seconds*1000);
+      dateText=d.toLocaleString();
+      day=d.toLocaleDateString();
+    }
+
+    daily[day]=(daily[day] || 0)+cal;
+
+    historyHTML += `
+      <div class="historyItem">
+        <b>${exercise}</b><br>
+        Reps: ${reps} | Bad Reps: ${bad} | Calories: ${cal}<br>
+        <small>${dateText}</small>
+      </div>
+    `;
+  });
+
+  document.getElementById("history").innerHTML=historyHTML || "<p>No workouts saved yet.</p>";
+
+  buildCharts(daily, exerciseData);
+}
+
+function buildCharts(daily, exerciseData){
+  let dailyLabels = Object.keys(daily).slice(-7);
+  let dailyValues = Object.values(daily).slice(-7);
+
+if(dailyLabels.length === 0){
+  dailyLabels = ["No Data"];
+  dailyValues = [0];
+}
+
+  let exerciseLabels = Object.keys(exerciseData);
+let exerciseValues = Object.values(exerciseData);
+
+if(exerciseLabels.length === 0){
+  exerciseLabels = ["No Data"];
+  exerciseValues = [0];
+}
+
+  if(dailyChart) dailyChart.destroy();
+  if(exerciseChart) exerciseChart.destroy();
+
+  dailyChart = new Chart(document.getElementById("dailyChart"),{
+    type:"line",
+    data:{
+      labels:dailyLabels.length ? dailyLabels : ["No data"],
+      datasets:[{
+        label:"Calories",
+        data:dailyValues.length ? dailyValues : [0],
+        tension:.4,
+        borderWidth:3
+      }]
+    },
+    options:{
+      plugins:{legend:{labels:{color:"white"}}},
+      scales:{
+        x:{ticks:{color:"white"}},
+        y:{ticks:{color:"white"}}
+      }
+    }
+  });
+
+  exerciseChart = new Chart(document.getElementById("exerciseChart"),{
+    type:"bar",
+    data:{
+      labels:exerciseLabels.length ? exerciseLabels : ["No data"],
+      datasets:[{
+        label:"Reps",
+        data:exerciseValues.length ? exerciseValues : [0],
+        borderWidth:2
+      }]
+    },
+    options:{
+      plugins:{legend:{labels:{color:"white"}}},
+      scales:{
+        x:{ticks:{color:"white"}},
+        y:{ticks:{color:"white"}}
+      }
+    }
+  });
+}
+
+function openMembership(){
+  window.location.href = "membership.html?from=dashboard";
+}
+
+function quickStart(type){
+  if(type==="15"){
+    alert("15 Min Workout: Biceps → Squats → Abs");
+    go("ai-biceps.html");
+  }
+
+  if(type==="fat"){
+    alert("Fat Burn: Squats → Chest → Abs");
+    go("ai-squat.html");
+  }
+}
+
+function scrollToSection(id){
+  document.getElementById(id).scrollIntoView({behavior:"smooth"});
+}
+
+function go(page){
+  window.location.href = page + "?from=dashboard";
+}
+
+function logout(){
+  auth.signOut().then(()=>{
+    window.location.href="index.html";
+  });
+}
+</script>
+
+</body>
+</html>
